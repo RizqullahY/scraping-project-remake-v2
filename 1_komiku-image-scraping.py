@@ -6,7 +6,6 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from InquirerPy import inquirer
 from requests.exceptions import RequestException
-# from utils import generate_index_from_template
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CHAPTER_LIST_DIR = os.path.join(BASE_DIR, "komiku_chapter_list")
@@ -15,6 +14,9 @@ RESULT_DIR = os.path.join(BASE_DIR, "komiku_result")
 os.makedirs(CHAPTER_LIST_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
 
+# ======================================================
+# DOWNLOAD IMAGE (WITH RETRY)
+# ======================================================
 def download_image(img_url, img_path, retries=5):
     for attempt in range(retries):
         try:
@@ -29,7 +31,7 @@ def download_image(img_url, img_path, retries=5):
                     with open(img_path, "wb") as f:
                         shutil.copyfileobj(r.raw, f)
                     print(f"[OK] {os.path.basename(img_path)}")
-                    return
+                    return True
 
         except RequestException:
             pass
@@ -38,6 +40,7 @@ def download_image(img_url, img_path, retries=5):
         time.sleep(1)
 
     print(f"[FAILED] {img_url}")
+    return False
 
 
 # ======================================================
@@ -67,14 +70,27 @@ def scrape_images_from_url(url, output_folder):
 
     os.makedirs(output_folder, exist_ok=True)
 
-    print(f"Found {len(image_urls)} images (single-thread / sequential download)")
+    print(f"Found {len(image_urls)} images (multi-thread download)")
 
-    # ========== DOWNLOAD BERURUTAN TANPA THREAD ==========
-    for i, img_url in enumerate(image_urls, 1):
-        img_path = os.path.join(output_folder, f"image_{i}.jpg")
-        download_image(img_url, img_path)
+    # Buat padding angka, misal total 123 → padding = 3 → 001-123
+    padding = len(str(len(image_urls)))
+
+    # MULTI THREAD DOWNLOAD
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = []
+
+        for idx, img_url in enumerate(image_urls, 1):
+            filename = f"{str(idx).zfill(padding)}.jpg"
+            img_path = os.path.join(output_folder, filename)
+
+            futures.append(executor.submit(download_image, img_url, img_path))
+
+        # Optional: Untuk progress menunggu thread
+        for future in as_completed(futures):
+            pass
 
     print(f"[DONE] Chapter complete: {output_folder}")
+
 
 # ======================================================
 # SELECT TITLE FILE
@@ -126,11 +142,9 @@ def main():
     for idx, chapter_url in enumerate(selected, start=start + 1):
         chapter_folder = os.path.join(output_dir, f"chapter_{idx}")
         scrape_images_from_url(chapter_url, chapter_folder)
-        # generate_index_from_template(chapter_folder)
 
     print("\n[Selesai] Semua chapter selesai discrape!")
     print(f"Hasil disimpan di: {output_dir}")
-    
 
 
 if __name__ == "__main__":

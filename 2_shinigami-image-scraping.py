@@ -3,6 +3,7 @@ import time
 import shutil
 import requests
 from InquirerPy import inquirer
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.exceptions import RequestException
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -13,7 +14,7 @@ os.makedirs(CHAPTER_LIST_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
 
 # ======================================================
-# DOWNLOAD IMAGE (NO THREADING)
+# DOWNLOAD IMAGE (WITH RETRY)
 # ======================================================
 def download_image(url, path, retries=4):
     for attempt in range(retries):
@@ -24,7 +25,7 @@ def download_image(url, path, retries=4):
                         shutil.copyfileobj(r.raw, f)
                     print(f"[OK] {os.path.basename(path)}")
                     return True
-        except:
+        except RequestException:
             pass
 
         print(f"[Retry {attempt+1}/{retries}] {url}")
@@ -32,8 +33,9 @@ def download_image(url, path, retries=4):
     print(f"[FAILED] {url}")
     return False
 
+
 # ======================================================
-# SCRAPE 1 CHAPTER - TANPA WORKER
+# SCRAPE 1 CHAPTER - MULTI THREAD
 # ======================================================
 def scrape_chapter(uuid, output_dir):
     api_url = f"https://api.shngm.io/v1/chapter/detail/{uuid}"
@@ -49,17 +51,30 @@ def scrape_chapter(uuid, output_dir):
     path = data["chapter"]["path"]
     images = data["chapter"]["data"]
 
-    os.makedirs(output_dir, exist_ok=True)
-    print(f"\nChapter {uuid} → {len(images)} gambar")
+    total_images = len(images)
+    padding = len(str(total_images))  # dynamic padding (3/4/5 digits)
 
-    # Download satu-per-satu
-    for idx, img in enumerate(images):
-        img_url = base + path + img
-        img_path = os.path.join(output_dir, f"{idx+1:03d}.jpg")
-        download_image(img_url, img_path)
-        time.sleep(0.2)  # delay kecil biar aman
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"\nChapter {uuid} → {total_images} gambar (multi-thread download)")
+
+    # MULTITHREADING
+    futures = []
+    with ThreadPoolExecutor(max_workers=12) as executor:
+
+        for idx, img in enumerate(images, 1):
+            img_url = base + path + img
+            filename = f"{str(idx).zfill(padding)}.jpg"
+            img_path = os.path.join(output_dir, filename)
+
+            futures.append(
+                executor.submit(download_image, img_url, img_path)
+            )
+
+        for _ in as_completed(futures):
+            pass  # hanya menunggu sampai selesai
 
     print(f"[DONE] Chapter selesai: {output_dir}")
+
 
 # ======================================================
 # PICK TITLE FILE
@@ -79,11 +94,12 @@ def pick_file():
 
     return os.path.join(CHAPTER_LIST_DIR, choice), choice
 
+
 # ======================================================
 # MAIN
 # ======================================================
 def main():
-    print("=== SHINIGAMI IMAGE SCRAPER (NO WORKER) ===\n")
+    print("=== SHINIGAMI IMAGE SCRAPER (MULTI WORKER) ===\n")
 
     txt_path, txt_name = pick_file()
     if txt_path is None:
@@ -111,6 +127,7 @@ def main():
         scrape_chapter(uuid, chap_folder)
 
     print("\n=== SELESAI ===")
+
 
 if __name__ == "__main__":
     main()
