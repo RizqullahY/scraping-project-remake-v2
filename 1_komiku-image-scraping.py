@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from InquirerPy import inquirer
 from requests.exceptions import RequestException
-from utils import generate_index_from_template
+# from utils import generate_index_from_template
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CHAPTER_LIST_DIR = os.path.join(BASE_DIR, "komiku_chapter_list")
@@ -43,7 +43,7 @@ def download_image(img_url, img_path, retries=5):
 # ======================================================
 # SCRAPE 1 CHAPTER (MULTITHREADED)
 # ======================================================
-def scrape_images_from_url(url, output_folder, workers=20):
+def scrape_images_from_url(url, output_folder):
     print(f"\n[SCRAPING] {url}")
 
     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -67,23 +67,14 @@ def scrape_images_from_url(url, output_folder, workers=20):
 
     os.makedirs(output_folder, exist_ok=True)
 
-    print(f"Found {len(image_urls)} images (multithread {workers} workers)")
+    print(f"Found {len(image_urls)} images (single-thread / sequential download)")
 
-    # MULTITHREAD DOWNLOAD
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = []
-
-        for i, img_url in enumerate(image_urls, 1):
-            img_path = os.path.join(output_folder, f"image_{i}.jpg")
-            futures.append(
-                executor.submit(download_image, img_url, img_path)
-            )
-
-        for _ in as_completed(futures):
-            pass
+    # ========== DOWNLOAD BERURUTAN TANPA THREAD ==========
+    for i, img_url in enumerate(image_urls, 1):
+        img_path = os.path.join(output_folder, f"image_{i}.jpg")
+        download_image(img_url, img_path)
 
     print(f"[DONE] Chapter complete: {output_folder}")
-
 
 # ======================================================
 # SELECT TITLE FILE

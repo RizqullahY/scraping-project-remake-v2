@@ -41,18 +41,26 @@ def zip_batch(series_dir, chapters, start_num, end_num):
     zip_name = f"{prefix}_{start_num}-{end_num}.zip"
     zip_path = series_dir / zip_name
 
+    # Wrapper folder = nama folder awal + _start-end
+    wrapper_folder = f"{prefix}_{start_num}-{end_num}"
+
     print(f"\n📦 Membuat ZIP: {zip_name}")
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for num in range(start_num, end_num + 1):
             if num not in chapters:
                 continue
-            for file_path in chapters[num].rglob("*"):
+            
+            chapter_folder = chapters[num]
+
+            for file_path in chapter_folder.rglob("*"):
                 if file_path.is_file():
-                    arcname = file_path.relative_to(series_dir)
+                    arcname = Path(wrapper_folder) / file_path.relative_to(series_dir)
                     zf.write(file_path, arcname)
 
     print(f"✅ ZIP selesai → {zip_path}")
+
+
 
 
 # -----------------------------------------------------------
@@ -80,7 +88,7 @@ def mode_otomatis(series_dir, chapters):
     ).execute())
 
     batch_size = int(inquirer.text(
-        message="Kelipatan batch berapa? (contoh: 5):"
+        message="Sampai chapter berapa? (contoh: 5):"
     ).execute())
 
     filtered = [c for c in chapter_nums if c >= start_from]
